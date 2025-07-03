@@ -6,6 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.dao.database import Base, str_uniq
 from app.core.constants import SystemRoles
 
+from app.modules.auth.models import User
+
 
 class Blog(Base):
     """
@@ -18,9 +20,9 @@ class Blog(Base):
     short_description: Mapped[str] = mapped_column(String(255), comment='Короткое описание')
     status: Mapped[str] = mapped_column(default='published', server_default='published', comment='Статус')
 
-    user: Mapped['User'] = relationship('User', back_populates='blogs')
+    user: Mapped['User'] = relationship('User', back_populates='blog')
     tags: Mapped[list['Tag']] = relationship(
-        secondary='blog_tags', # Указываем промежуточную таблицу
+        secondary='blogtags', # Указываем промежуточную таблицу
         back_populates='blogs'
     )
 
@@ -32,7 +34,7 @@ class Tag(Base):
 
     name: Mapped[str] = mapped_column(String(50), unique=True, comment='Наименование')
     blogs: Mapped[list['Blog']] = relationship(
-        secondary='blog_tags', # Указываем промежуточную таблицу
+        secondary='blogtags', # Указываем промежуточную таблицу
         back_populates='tags'
     )
 
