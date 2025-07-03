@@ -54,6 +54,7 @@ class User(Base):
         ForeignKey('roles.id'), default=SystemRoles.USER, server_default=text(f"'{SystemRoles.USER}'::uuid")
     )
     role: Mapped["Role"] = relationship("Role", back_populates="users", lazy="joined")
+    blog: Mapped[list['Blog']] = relationship('Blog', back_populates='user') # back_populates='user' Должно совпадать с именем в модели Blogs
 
     def __repr__(self):
         """

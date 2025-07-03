@@ -3,8 +3,8 @@ from fastapi import Request, Depends
 from jose import jwt, JWTError, ExpiredSignatureError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dao import UsersDAO
-from app.auth.models import User
+from app.modules.auth.dao import UsersDAO
+from app.modules.auth.models import User
 from app.core.config import settings
 from app.core.dependencies.dao_dep import get_session_without_commit
 from app.core.exceptions.user_exceptions import (
