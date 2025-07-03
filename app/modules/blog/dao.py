@@ -73,3 +73,39 @@ class BlogTagDAO(BaseDAO):
     """
 
     model = BlogTag
+
+    @classmethod
+    async def add_blog_tags(cls, session: AsyncSession, blog_tag_pairs: list[dict]) -> None:
+        """
+        Метод для массового добавления связок блогов и тегов в базу данных.
+        Принимает список словарей с blog_id и tag_id, добавляет соответствующие записи.
+
+        :param session: Сессия базы данных.
+        :param blog_tag_pairs: Список словарей с ключами 'blog_id' и 'tag_id'.
+        :return: None
+        """
+
+        blog_tag_instances = []
+        for pair in blog_tag_pairs:
+            blog_id = pair.get('bog_id')
+            tag_id = pair.get('tag_id')
+
+            if blog_id and tag_id:
+                blog_tag = cls.model(blog_id=blog_id, tag_id=tag_id)
+                blog_tag_instances.append(blog_tag)
+            else:
+                logger.warning(f'Пропущен неверный параметр в паре: {pair}')
+
+        if blog_tag_instances:
+            session.add_all(blog_tag_instances) # Добавляем все объекты за один раз
+
+            try:
+                await session.flush()  # Применяем изменения и сохраняем записи в базе данных
+                logger.info(f'{len(blog_tag_instances)} связок блогов и тегов успешно добавлено.')
+
+            except SQLAlchemyError as e:
+                await session.rollback()
+                logger.error(f'Ошибка при добавлении связок блогов и тегов: {e}')
+                raise e
+        else:
+            logger.warning('Нет валидных данных для добавления в таблицу blog_tags.')
