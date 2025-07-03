@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from typing import List
 from pydantic import BaseModel, ConfigDict, computed_field, Field
@@ -19,3 +20,10 @@ class BlogCreateSchemaBase(BaseModelConfig):
     content: str
     short_description: str
     tags: List[str] = []
+
+
+class BlogCreateSchemaAdd(BlogCreateSchemaBase):
+    """
+    Схема добавления автора
+    """
+    author: uuid.UUID
