@@ -12,8 +12,8 @@ from app.modules.blog.schemas import BlogFullResponse, BlogNotFind
 
 async def get_blog_info(
         blog_id: uuid.UUID,
-        session: AsyncSession = get_session_without_commit,
-        user_data: User | None = get_current_user_optional
+        session: AsyncSession = Depends(get_session_without_commit),
+        user_data: User | None = Depends(get_current_user_optional)
 ) -> BlogFullResponse | BlogNotFind:
     """
     Зависимость на получения блога.
