@@ -87,7 +87,7 @@ class BlogTagDAO(BaseDAO):
 
         blog_tag_instances = []
         for pair in blog_tag_pairs:
-            blog_id = pair.get('bog_id')
+            blog_id = pair.get('blog_id')
             tag_id = pair.get('tag_id')
 
             if blog_id and tag_id:
