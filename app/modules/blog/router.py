@@ -3,12 +3,13 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from fastapi.responses import JSONResponse
+
+from app.core.dependencies.dao_dep import get_session_with_commit
 # from app.api.schemas import BlogCreateSchemaBase, BlogCreateSchemaAdd, BlogFullResponse, BlogNotFind
 from app.modules.blog.schemas import BlogCreateSchemaBase, BlogCreateSchemaAdd
 from app.core.dependencies.auth_dep import get_current_user
 # from app.core.dependencies.auth_dep import get_current_user, get_blog_info
 from app.modules.auth.models import User
-from app.dao.session_maker import SessionDep, TransactionSessionDep
 from app.modules.blog.dao import BlogDAO, BlogTagDAO, TagDAO
 
 
@@ -19,7 +20,7 @@ router = APIRouter()
 async def add_blog(
         add_data: BlogCreateSchemaBase,
         user_data: User = Depends(get_current_user),
-        session: AsyncSession = TransactionSessionDep
+        session: AsyncSession = Depends(get_session_with_commit)
 ):
     """
     Добавление блога.
@@ -43,6 +44,7 @@ async def add_blog(
             await BlogTagDAO.add_blog_tags(
                 session=session, blog_tag_pairs=[{'blog_id': blog_id, 'tag_id': i} for i in tags_ids]
             )
+        logger.info(f'Блог с ID {blog_id} успешно добавлен с тегами {[str(i) for i in tags_ids]}.')
         return {'status': 'success', 'message': f'Блог с ID {blog_id} успешно добавлен с тегами.'}
 
     except IntegrityError as e:
