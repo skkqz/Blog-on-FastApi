@@ -55,13 +55,20 @@ async def add_blog(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Ошибка при добавлении блога.')
 
 
-# #/todo найти решение вывода информации о блоге
-@router.get('/blog/{blog_id}', summary='Детальная информация блога')
+
+@router.get('/detail/{blog_id}', summary='Детальная информация блога')
 async def blog_detail(
         blog_id: uuid.UUID,
         user_data: User = Depends(get_current_user),
         session: AsyncSession = Depends(get_session_with_commit)
 ) -> BlogFullResponse | BlogNotFind:
+    """
+    Детально отображение блога.
+    :param blog_id: Идентификатор блога.
+    :param user_data:  Данные пользователя.
+    :param session: Сессия.
+    :return: Данные блога.
+    """
 
     author_id = user_data.id if user_data else None
     blog = await BlogDAO.get_full_blog_info(session=session, blog_id=blog_id, author_id=author_id)
