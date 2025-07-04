@@ -27,6 +27,14 @@ def get_refresh_token(request: Request) -> str:
         raise TokenNoFound
     return token
 
+def get_token_optional(request: Request) -> str | None:
+    """
+    Получить токен пользователя.
+    :param request: Данные запроса.
+    :return: Токен или None
+    """
+    return request.cookies.get('users_access_token')
+
 
 async def check_refresh_token(
         token: str = Depends(get_refresh_token),
@@ -56,7 +64,8 @@ async def get_current_user(
         token: str = Depends(get_access_token),
         session: AsyncSession = Depends(get_session_without_commit)
 ) -> User:
-    """Проверяем access_token и возвращаем пользователя."""
+    """Проверяем access_token и возвращаем пользователя или исключения."""
+
     try:
         # Декодируем токен
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -78,6 +87,37 @@ async def get_current_user(
     user = await UsersDAO(session).find_one_or_none_by_id(data_id=user_id)
     if not user:
         raise UserNotFoundException
+    return user
+
+
+async def get_current_user_optional(
+        token: str | None = Depends(get_token_optional),
+        session: AsyncSession = get_session_without_commit
+) -> User | None:
+    """
+    Получить пользователя или None.
+    :param token: Токен.
+    :param session: Сессия.
+    :return: Пользователь или None.
+    """
+    if not token:
+        return None
+
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=settings.ALGORITHM)
+    except JWTError:
+        return None
+
+    expire: str = payload.get('exp')
+    expire_time = datetime.fromtimestamp(int(expire), tz=timezone.utc)
+    if (not expire) or (expire_time < datetime.now(timezone.utc)):
+        return None
+
+    user_id: str = payload.get('sub')
+    if not user_id:
+        return None
+
+    user = await UsersDAO.find_one_or_none_by_id(data_id=int(user_id), session=session)
     return user
 
 
