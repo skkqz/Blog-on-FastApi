@@ -1,5 +1,4 @@
 import uuid
-from typing import Optional
 
 from loguru import logger
 
@@ -8,7 +7,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
-# from app.modules.blog.schemas import BlogFullResponse
 from app.dao.base import BaseDAO
 from app.modules.blog.models import Blog, Tag, BlogTag
 from app.modules.blog.schemas import BlogFullResponse

@@ -7,9 +7,9 @@ from sqlalchemy.exc import IntegrityError
 from fastapi.responses import JSONResponse
 
 from app.core.dependencies.blog_dep import get_blog_info
-from app.core.dependencies.dao_dep import get_session_with_commit
+from app.core.dependencies.dao_dep import get_session_with_commit, get_session_without_commit
 from app.modules.blog.schemas import BlogCreateSchemaBase, BlogCreateSchemaAdd, BlogFullResponse, BlogNotFind
-from app.core.dependencies.auth_dep import get_current_user
+from app.core.dependencies.auth_dep import get_current_user, get_current_user_optional
 from app.modules.auth.models import User
 from app.modules.blog.dao import BlogDAO, BlogTagDAO, TagDAO
 
@@ -55,23 +55,21 @@ async def add_blog(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Ошибка при добавлении блога.')
 
 
-#/todo найти решение вывода информации о блоге
-@router.get('/get_blog/{blog_id}', summary="Получить информацию по блогу")
-async def get_blog_endpoint(
+# #/todo найти решение вывода информации о блоге
+@router.get('/blog/{blog_id}', summary='Детальная информация блога')
+async def blog_detail(
         blog_id: uuid.UUID,
-        blog_info: BlogFullResponse | BlogNotFind = Depends(get_blog_info)
+        user_data: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session_with_commit)
 ) -> BlogFullResponse | BlogNotFind:
-    """
-    Получить блог.
-    :param blog_id: Идентификатор блога.
-    :param blog_info: Информация о блоге.
-    :return: Информация о блоге.
-    """
 
-    return blog_info
+    author_id = user_data.id if user_data else None
+    blog = await BlogDAO.get_full_blog_info(session=session, blog_id=blog_id, author_id=author_id)
+
+    return blog
 
 
-@router.post('delete_blog/{blog_id}', summary='Удалить блог')
+@router.post('/delete_blog/{blog_id}', summary='Удалить блог')
 async def delete_blog(
         blog_id: uuid.UUID,
         session: AsyncSession = Depends(get_session_with_commit),
