@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload, selectinload
 # from app.modules.blog.schemas import BlogFullResponse
 from app.dao.base import BaseDAO
 from app.modules.blog.models import Blog, Tag, BlogTag
+from app.modules.blog.schemas import BlogFullResponse
 
 
 class BlogDAO(BaseDAO):
@@ -19,6 +20,94 @@ class BlogDAO(BaseDAO):
     """
 
     model = Blog
+
+    @classmethod
+    async def get_full_blog_info(cls, session: AsyncSession, blog_id: uuid.UUID, author_id: uuid.UUID = None):
+        """
+        Метод для получения полной информации о блоге, включая данные об авторе и тегах.
+        Для опубликованных блогов доступ к информации открыт всем пользователям.
+        Для черновиков доступ открыт только автору блога.
+        """
+
+        # Строим запрос с подгрузкой данных о пользователе и тегах
+        query = (
+            select(
+                cls.model).options(
+                joinedload(Blog.user),  # Подгружаем данные о пользователе (авторе)
+                selectinload(Blog.tags) # Подгружаем связанные теги
+            ).filter_by(id=blog_id)     # Фильтруем по ID блога
+        )
+
+        result = await session.execute(query)
+        blog = result.scalar_one_or_none()
+
+        # Если блог не найден или нет прав для его просмотра
+        if not blog:
+            logger.warning(f'Блог с ID {blog_id} не найден или у вас нет прав на его просмотр.')
+            return {
+                'message': f'Блог с ID {blog_id} не найден или у вас нет прав на его просмотр.',
+                'status': 'error'
+            }
+
+        # Если блог в статусе 'draft', проверяем, является ли пользователь автором
+        if blog.status == 'draft' and (author_id != blog.author):
+            logger.warning('Этот блог находится в статусе черновика, и доступ к нему имеют только авторы.')
+            return {
+                'message': 'Этот блог находится в статусе черновика, и доступ к нему имеют только авторы.',
+                'status': 'error'
+            }
+
+        # Возвращаем данные блога (если он опубликован или автор имеет доступ к черновику)
+        return BlogFullResponse.model_validate(blog)
+
+    @classmethod
+    async def delete_blog(cls, session: AsyncSession, blog_id: uuid.UUID, author_id: uuid.UUID) -> dict:
+        """
+        Метод для удаления блога. Удаление возможно только автором блога.
+
+        :param session: Асинхронная сессия SQLAlchemy
+        :param blog_id: ID блога
+        :param author_id: ID автора, пытающегося удалить блог
+        :return: Словарь с результатом операции
+        """
+
+        try:
+            query = select(cls.model).filter_by(id=blog_id)
+            result = await session.execute(query)
+            blog = result.scalar_one_or_none()
+
+            if not blog:
+                logger.warning(f'Блог с ID {blog_id} не найден.')
+                return {
+                    'message': f'Блог с ID {blog_id} не найден.',
+                    'status': 'error'
+                }
+
+            # Проверяем, является ли пользователь автором блога
+            if author_id != blog.author:
+                logger.warning(f'Нет прав на удаление этого блога.')
+                return {
+                    'message': 'У вас нет прав на удаление этого блога.',
+                    'status': 'error'
+                }
+
+            # Удаляем блог
+            await session.delete(blog)
+            await session.flush()
+
+            logger.info(f'Блог с ID {blog_id} успешно удален.')
+            return {
+                'message': f'Блог с ID {blog_id} успешно удален.',
+                'status': 'success'
+            }
+
+        except SQLAlchemyError as e:
+            await session.rollback()
+            logger.error(f'Произошла ошибка при удалении блога: {str(e)}')
+            return {
+                'message': f'Произошла ошибка при удалении блога: {str(e)}',
+                'status': 'error'
+            }
 
 
 class TagDAO(BaseDAO):
