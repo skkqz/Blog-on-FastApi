@@ -1,4 +1,5 @@
 import uuid
+from typing import Optional
 
 from loguru import logger
 
@@ -107,6 +108,149 @@ class BlogDAO(BaseDAO):
                 'status': 'error'
             }
 
+    @classmethod
+    async def change_blog_status(
+            cls, session: AsyncSession, blog_id: uuid.UUID, new_status: str, author_id: uuid.UUID
+    ) -> dict:
+        """
+        Метод для изменения статуса блога. Изменение возможно только автором блога.
+
+        :param session: Асинхронная сессия SQLAlchemy
+        :param blog_id: ID блога
+        :param new_status: Новый статус блога ('draft' или 'published')
+        :param author_id: ID автора, пытающегося изменить статус
+        :return: Словарь с результатом операции
+        """
+
+        if new_status not in ['draft', 'published']:
+            return {
+                'message': 'Недопустимый статус. Используйте "draft" или "published".',
+                'status': 'error'
+            }
+
+        try:
+            query = select(cls.model).filter_by(id=blog_id)
+            result = await session.execute(query)
+            blog = result.scalar_one_or_none()
+
+            if not blog:
+                return {
+                    'message': f'Блог с ID {blog_id} не найден.',
+                    'status': 'error'
+                }
+
+            if blog.author != author_id:
+                return {
+                    'message': 'У вас нет прав на изменение статуса этого блога.',
+                    'status': 'error'
+                }
+
+            # Если текущий статус совпадает с новым, возвращаем сообщение без изменений
+            if blog.status == new_status:
+                return {
+                    'message': f'Блог уже имеет статус "{new_status}".',
+                    'status': 'info',
+                    'blog_id': blog_id,
+                    'current_status': new_status
+                }
+
+            # Меняем статус блога
+            blog.status = new_status
+            await session.flush()
+
+            return {
+                'message': f'Статус блога успешно изменен на "{new_status}".',
+                'status': 'success',
+                'blog_id': blog_id,
+                'new_status': new_status
+            }
+        except SQLAlchemyError as e:
+            await session.rollback()
+            return {
+                'message': f'Произошла ошибка при изменении статуса блога: {str(e)}',
+                'status': 'error'
+            }
+
+    @classmethod
+    async def get_blog_list(cls, session: AsyncSession, author_id: Optional[uuid.UUID] = None, tag: Optional[str] = None,
+                            page: int = 1, page_size: int = 10):
+        """
+        Получает список опубликованных блогов с возможностью фильтрации и пагинации.
+
+        :param session: Асинхронная сессия SQLAlchemy.
+        :param author_id: ID автора для фильтрации (опционально).
+        :param tag: Название тега для фильтрации (опционально).
+        :param page: Номер страницы (начиная с 1).
+        :param page_size: Количество записей на странице (от 3 до 100).
+        :return: Словарь с ключами page, total_page, total_result, blogs.
+        """
+
+        # Ограничение параметров
+        page_size = max(3, min(page_size,  100))
+        page = max(1, page)
+
+        base_query = select(cls.model).options(
+            joinedload(cls.model.user),
+            selectinload(cls.model.tags)
+        ).filter_by(status='published')
+
+        # Фильтрация по автору
+        if author_id is not None:
+            base_query = base_query.filter_by(author=author_id)
+
+        # Фильтрация по тегу
+        if tag:
+            base_query = base_query.join(cls.model.tags).filter(cls.model.tags.any(Tag.name.ilike(f"%{tag.lower()}%")))
+
+        # Подсчет общего количества записей
+        count_query = select(func.count()).select_from(base_query.subquery())
+        total_result = await session.scalar(count_query)
+
+        # Если записей нет, возвращаем пустой результат
+        if not total_result:
+            return {
+                'page': page,
+                'total_page': 0,
+                'total_result': 0,
+                'blogs': []
+            }
+
+        # Расчет количества страниц
+        total_page = (total_result + page_size - 1) // page_size
+
+        # Применение пагинации
+        offset = (page - 1) * page_size
+        paginated_query = base_query.offset(offset).limit(page_size)
+
+        # Выполнение запроса и получение результатов
+        result = await session.execute(paginated_query)
+        blogs = result.scalars().all()
+
+        # Удаление дубликатов блогов по их ID
+        unique_blogs = []
+        seen_ids = set()
+        for blog in blogs:
+            if blog.id not in seen_ids:
+                unique_blogs.append(BlogFullResponse.model_validate(blog))
+                seen_ids.add(blog.id)
+
+        # Логирование
+        filters = []
+        if author_id is not None:
+            filters.append(f'author_id={author_id}')
+        if tag:
+            filters.append(f'tag={tag}')
+        filter_str = ' & '.join(filters) if filters else 'no filters'
+
+        logger.info(f'Page {page} fetched with {len(blogs)} blogs, filters: {filter_str}')
+        # Формирование результата
+        return {
+            'page': page,
+            'total_page': total_page,
+            'total_result': total_result,
+            'blogs': unique_blogs
+        }
+
 
 class TagDAO(BaseDAO):
     """
@@ -148,7 +292,7 @@ class TagDAO(BaseDAO):
                     tag_ids.append(new_tag.id)
                 except SQLAlchemyError as e:
                     await session.rollback()
-                    logger.error(f"Ошибка при добавлении тега '{tag_name}': {e}")
+                    logger.error(f'Ошибка при добавлении тега "{tag_name}": {e}')
                     raise e
 
         return tag_ids
