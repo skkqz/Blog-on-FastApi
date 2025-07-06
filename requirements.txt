@@ -12,3 +12,5 @@ passlib[bcrypt]==1.7.4
 python-jose==3.3.0
 loguru==0.7.2
 asyncpg==0.30.0
+markdown2==2.5.1
+

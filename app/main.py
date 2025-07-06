@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from app.auth.router import router as router_auth
+from app.modules.auth.router import router as router_auth
+from app.modules.blog.router import router as router_blog
 
 
 @asynccontextmanager
@@ -72,7 +73,13 @@ def register_routers(app: FastAPI) -> None:
     # Подключение роутеров
     app.include_router(root_router, tags=['root'])
     app.include_router(router_auth, prefix='/auth', tags=['Authentication'])
+    app.include_router(router_blog, prefix='/blog', tags=['Blog'])
 
 
 # Создание экземпляра приложения
 app = create_app()
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
