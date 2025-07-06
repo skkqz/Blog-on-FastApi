@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from fastapi.responses import JSONResponse
 
-from app.core.dependencies.blog_dep import get_blog_info
 from app.core.dependencies.dao_dep import get_session_with_commit, get_session_without_commit
 from app.modules.blog.schemas import BlogCreateSchemaBase, BlogCreateSchemaAdd, BlogFullResponse, BlogNotFind
 from app.core.dependencies.auth_dep import get_current_user, get_current_user_optional
@@ -28,7 +27,7 @@ async def add_blog(
 
     :param add_data: Данные для создания блога (заголовок, контент, теги).
     :param user_data: Авторизованный пользователь (автоматически).
-    :param session: Сессия БД (автоматически).
+    :param session: Асинхронная сессия SQLAlchemy.
     :return: Созданный блог с привязанными тегами.
     """
 
@@ -64,9 +63,10 @@ async def blog_detail(
 ) -> BlogFullResponse | BlogNotFind:
     """
     Детально отображение блога.
+
     :param blog_id: Идентификатор блога.
     :param user_data:  Данные пользователя.
-    :param session: Сессия.
+    :param session: Асинхронная сессия SQLAlchemy.
     :return: Данные блога.
     """
 
@@ -74,6 +74,56 @@ async def blog_detail(
     blog = await BlogDAO.get_full_blog_info(session=session, blog_id=blog_id, author_id=author_id)
 
     return blog
+
+
+@router.patch('/change_blog_status/{blog_id}', summary="Изменить статус блога")
+async def change_blog_status(
+        blog_id: uuid.UUID,
+        new_status: str,
+        session: AsyncSession = Depends(get_session_with_commit),
+        current_user: User = Depends(get_current_user)
+):
+    """
+    Изменяет статус блога на указанный.
+
+    :param blog_id: Идентификатор изменяемого блога.
+    :param new_status:  Новый статус блога (должен быть одним из: 'draft', 'published').
+    :param session: Асинхронная сессия SQLAlchemy.
+    :param current_user: Текущий аутентифицированный пользователь.
+    :return: Словарь с результатом операции.
+    """
+    result = await BlogDAO.change_blog_status(session, blog_id, new_status, current_user.id)
+    if result['status'] == 'error':
+        raise HTTPException(status_code=400, detail=result['message'])
+    return result
+
+
+@router.get('/blogs/', summary='Получить все блоги в статусе "publish"')
+async def get_blog_info(
+        author_id: uuid.UUID | None = None,
+        tag: str | None = None,
+        page: int = Query(1, ge=1, description='Номер страницы'),
+        page_size: int = Query(10, ge=10, le=100, description='Записей на странице'),
+        session: AsyncSession = Depends(get_session_without_commit),
+):
+    """
+    Получает список опубликованных блогов с возможностью фильтрации и пагинацией.
+
+    :param author_id: Фильтр по ID автора блога. Если не указан, возвращаются блоги всех авторов.
+    :param tag: Фильтр по тегу. Если не указан, возвращаются блоги с любыми тегами.
+    :param page: Номер страницы (начинается с 1).
+    :param page_size:  Количество блогов на странице (10-100).
+    :param session: Асинхронная сессия SQLAlchemy.
+    :return: Словарь с результатами.
+    """
+
+    try:
+        result = await BlogDAO.get_blog_list(session=session, author_id=author_id, tag=tag, page=page,
+                                             page_size=page_size)
+        return result if result['blogs'] else BlogNotFind(message='логи не найдены', status='error')
+    except Exception as e:
+        logger.error(f'Ошибка при получении блогов: {e}')
+        return JSONResponse(status_code=500, content={'detail': 'Ошибка сервера'})
 
 
 @router.post('/delete_blog/{blog_id}', summary='Удалить блог')
@@ -84,8 +134,9 @@ async def delete_blog(
 ):
     """
     Удаление блога.
+
     :param blog_id: Идентификатор блога.
-    :param session: Сессия.
+    :param session: Асинхронная сессия SQLAlchemy.
     :param current_user: Данные пользователя.
     :return:
     """
