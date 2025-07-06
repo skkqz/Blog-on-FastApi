@@ -117,7 +117,7 @@ async def get_current_user_optional(
     if not user_id:
         return None
 
-    user = await UsersDAO.find_one_or_none_by_id(data_id=int(user_id), session=session)
+    user = await UsersDAO(session=session).find_one_or_none_by_id(data_id=int(user_id))
     return user
 
 
